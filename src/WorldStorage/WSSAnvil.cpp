@@ -27,7 +27,6 @@
 #include "../BlockEntities/MobHeadEntity.h"
 #include "../BlockEntities/FlowerPotEntity.h"
 
-
 #include "../Mobs/Monster.h"
 #include "../Mobs/IncludeAllMonsters.h"
 
@@ -36,7 +35,12 @@
 #include "../Entities/FallingBlock.h"
 #include "../Entities/Minecart.h"
 #include "../Entities/Pickup.h"
-#include "../Entities/ProjectileEntity.h"
+#include "../Entities/ArrowEntity.h"
+#include "../Entities/ThrownEggEntity.h"
+#include "../Entities/ThrownEnderPearlEntity.h"
+#include "../Entities/ThrownSnowballEntity.h"
+#include "../Entities/FireChargeEntity.h"
+#include "../Entities/GhastFireballEntity.h"
 #include "../Entities/TNTEntity.h"
 #include "../Entities/ExpOrb.h"
 #include "../Entities/HangingEntity.h"
@@ -2272,7 +2276,7 @@ void cWSSAnvil::LoadWitherFromNBT(cEntityList & a_Entities, const cParsedNBT & a
 	int CurrLine = a_NBT.FindChildByName(a_TagIdx, "Invul");
 	if (CurrLine > 0)
 	{
-		Monster->SetNumInvulnerableTicks(a_NBT.GetInt(CurrLine));
+		Monster->SetWitherInvulnerableTicks(a_NBT.GetInt(CurrLine));
 	}
 
 	a_Entities.push_back(Monster.release());
