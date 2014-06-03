@@ -116,6 +116,7 @@ public:
 	virtual void SendSpawnMob            (const cMonster & a_Mob) override;
 	virtual void SendSpawnObject         (const cEntity & a_Entity, char a_ObjectType, int a_ObjectData, Byte a_Yaw, Byte a_Pitch) override;
 	virtual void SendSpawnVehicle        (const cEntity & a_Vehicle, char a_VehicleType, char a_VehicleSubType) override;
+	virtual void SendStatistics          (const cStatManager & a_Manager) override;
 	virtual void SendTabCompletionResults(const AStringVector & a_Results) override;
 	virtual void SendTeleportEntity      (const cEntity & a_Entity) override;
 	virtual void SendThunderbolt         (int a_BlockX, int a_BlockY, int a_BlockZ) override;
@@ -238,7 +239,7 @@ protected:
 	bool m_IsEncrypted;
 	
 	cAesCfb128Decryptor m_Decryptor;
-	cAesCfb128Decryptor m_Encryptor;
+	cAesCfb128Encryptor m_Encryptor;
 
 	/** The logfile where the comm is logged, when g_ShouldLogComm is true */
 	cFile m_CommLogFile;

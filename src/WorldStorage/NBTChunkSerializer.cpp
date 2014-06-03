@@ -88,23 +88,48 @@ void cNBTChunkSerializer::Finish(void)
 void cNBTChunkSerializer::AddItem(const cItem & a_Item, int a_Slot, const AString & a_CompoundName)
 {
 	m_Writer.BeginCompound(a_CompoundName);
-	m_Writer.AddShort("id",     (short)(a_Item.m_ItemType));
-	m_Writer.AddShort("Damage", a_Item.m_ItemDamage);
-	m_Writer.AddByte ("Count",  a_Item.m_ItemCount);
+	m_Writer.AddShort("id",         (short)(a_Item.m_ItemType));
+	m_Writer.AddShort("Damage",     a_Item.m_ItemDamage);
+	m_Writer.AddByte ("Count",      a_Item.m_ItemCount);
 	if (a_Slot >= 0)
 	{
 		m_Writer.AddByte ("Slot", (unsigned char)a_Slot);
 	}
 	
-	// Write the enchantments:
-	if (!a_Item.m_Enchantments.IsEmpty() || ((a_Item.m_ItemType == E_ITEM_FIREWORK_ROCKET) || (a_Item.m_ItemType == E_ITEM_FIREWORK_STAR)))
+	// Write the tag compound (for enchantment, firework, custom name and repair cost):
+	if (
+		(!a_Item.m_Enchantments.IsEmpty()) ||
+		((a_Item.m_ItemType == E_ITEM_FIREWORK_ROCKET) || (a_Item.m_ItemType == E_ITEM_FIREWORK_STAR)) ||
+		(a_Item.m_RepairCost > 0) ||
+		(a_Item.m_CustomName != "") ||
+		(a_Item.m_Lore != "")
+	)
 	{
 		m_Writer.BeginCompound("tag");
+			if (a_Item.m_RepairCost > 0)
+			{
+				m_Writer.AddInt("RepairCost", a_Item.m_RepairCost);
+			}
+
+			if ((a_Item.m_CustomName != "") || (a_Item.m_Lore != ""))
+			{
+				m_Writer.BeginCompound("display");
+				if (a_Item.m_CustomName != "")
+				{
+					m_Writer.AddString("Name", a_Item.m_CustomName);
+				}
+				if (a_Item.m_Lore != "")
+				{
+					m_Writer.AddString("Lore", a_Item.m_Lore);
+				}
+				m_Writer.EndCompound();
+			}
+
 			if ((a_Item.m_ItemType == E_ITEM_FIREWORK_ROCKET) || (a_Item.m_ItemType == E_ITEM_FIREWORK_STAR))
 			{
 				cFireworkItem::WriteToNBTCompound(a_Item.m_FireworkItem, m_Writer, (ENUM_ITEM_ID)a_Item.m_ItemType);
 			}
-			
+
 			if (!a_Item.m_Enchantments.IsEmpty())
 			{
 				const char * TagName = (a_Item.m_ItemType == E_ITEM_BOOK) ? "StoredEnchantments" : "ench";
@@ -366,38 +391,41 @@ void cNBTChunkSerializer::AddFallingBlockEntity(cFallingBlock * a_FallingBlock)
 
 void cNBTChunkSerializer::AddMinecartEntity(cMinecart * a_Minecart)
 {
-	const char * EntityClass = NULL;
-	switch (a_Minecart->GetPayload())
-	{
-		case cMinecart::mpNone:    EntityClass = "MinecartRideable"; break;
-		case cMinecart::mpChest:   EntityClass = "MinecartChest";    break;
-		case cMinecart::mpFurnace: EntityClass = "MinecartFurnace";  break;
-		case cMinecart::mpTNT:     EntityClass = "MinecartTNT";      break;
-		case cMinecart::mpHopper:  EntityClass = "MinecartHopper";   break;
-		default:
-		{
-			ASSERT(!"Unhandled minecart payload type");
-			return;
-		}
-	}  // switch (payload)
-	
 	m_Writer.BeginCompound("");
-		AddBasicEntity(a_Minecart, EntityClass);
+	
 		switch (a_Minecart->GetPayload())
 		{
 			case cMinecart::mpChest:
 			{
+				AddBasicEntity(a_Minecart, "MinecartChest");
 				// Add chest contents into the Items tag:
 				AddMinecartChestContents((cMinecartWithChest *)a_Minecart);
 				break;
 			}
-			
 			case cMinecart::mpFurnace:
 			{
+				AddBasicEntity(a_Minecart, "MinecartFurnace");
 				// TODO: Add "Push" and "Fuel" tags
 				break;
 			}
+			case cMinecart::mpHopper:
+			{
+				AddBasicEntity(a_Minecart, "MinecartHopper");
+				// TODO: Add hopper contents?
+				break;
+			}
+			case cMinecart::mpTNT:
+			{
+				AddBasicEntity(a_Minecart, "MinecartTNT");
+				break;
+			}
+			case cMinecart::mpNone:
+			{
+				AddBasicEntity(a_Minecart, "MinecartRideable");
+				break;
+			}
 		}  // switch (Payload)
+	
 	m_Writer.EndCompound();
 }
 
@@ -490,7 +518,7 @@ void cNBTChunkSerializer::AddMonsterEntity(cMonster * a_Monster)
 			}
 			case cMonster::mtMagmaCube:
 			{
-				m_Writer.AddByte("Size", ((const cMagmaCube *)a_Monster)->GetSize());
+				m_Writer.AddInt("Size", ((const cMagmaCube *)a_Monster)->GetSize());
 				break;
 			}
 			case cMonster::mtSheep:
@@ -625,6 +653,13 @@ void cNBTChunkSerializer::AddHangingEntity(cHangingEntity * a_Hanging)
 		case BLOCK_FACE_YP: m_Writer.AddByte("Dir", (unsigned char)1); break;
 		case BLOCK_FACE_ZM: m_Writer.AddByte("Dir", (unsigned char)0); break;
 		case BLOCK_FACE_ZP: m_Writer.AddByte("Dir", (unsigned char)3); break;
+		
+		case BLOCK_FACE_XM:
+		case BLOCK_FACE_XP:
+		case BLOCK_FACE_NONE:
+		{
+			break;
+		}
 	}
 }
 
@@ -692,10 +727,9 @@ void cNBTChunkSerializer::AddMinecartChestContents(cMinecartWithChest * a_Mineca
 
 
 
-bool cNBTChunkSerializer::LightIsValid(bool a_IsLightValid)
+void cNBTChunkSerializer::LightIsValid(bool a_IsLightValid)
 {
 	m_IsLightValid = a_IsLightValid;
-	return a_IsLightValid;  // We want lighting only if it's valid, otherwise don't bother
 }
 
 

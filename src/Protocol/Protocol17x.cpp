@@ -11,13 +11,19 @@ Implements the 1.7.x protocol classes:
 #include "json/json.h"
 #include "Protocol17x.h"
 #include "ChunkDataSerializer.h"
+#include "PolarSSL++/Sha1Checksum.h"
+
 #include "../ClientHandle.h"
 #include "../Root.h"
 #include "../Server.h"
 #include "../World.h"
+#include "../StringCompression.h"
+#include "../CompositeChat.h"
+#include "../Statistics.h"
+
 #include "../WorldStorage/FastNBT.h"
 #include "../WorldStorage/EnchantmentSerializer.h"
-#include "../StringCompression.h"
+
 #include "../Entities/ExpOrb.h"
 #include "../Entities/Minecart.h"
 #include "../Entities/FallingBlock.h"
@@ -25,15 +31,15 @@ Implements the 1.7.x protocol classes:
 #include "../Entities/Pickup.h"
 #include "../Entities/Player.h"
 #include "../Entities/ItemFrame.h"
+#include "../Entities/ArrowEntity.h"
+#include "../Entities/FireworkEntity.h"
+
 #include "../Mobs/IncludeAllMonsters.h"
 #include "../UI/Window.h"
+
 #include "../BlockEntities/CommandBlockEntity.h"
 #include "../BlockEntities/MobHeadEntity.h"
 #include "../BlockEntities/FlowerPotEntity.h"
-#include "../CompositeChat.h"
-#include "../Entities/ArrowEntity.h"
-#include "../Entities/FireworkEntity.h"
-#include "PolarSSL++/Sha1Checksum.h"
 
 
 
@@ -197,7 +203,7 @@ void cProtocol172::SendBlockChanges(int a_ChunkX, int a_ChunkZ, const sSetBlockV
 	Pkt.WriteInt(a_ChunkX);
 	Pkt.WriteInt(a_ChunkZ);
 	Pkt.WriteShort((short)a_Changes.size());
-	Pkt.WriteInt(a_Changes.size() * 4);
+	Pkt.WriteInt((int)a_Changes.size() * 4);
 	for (sSetBlockVector::const_iterator itr = a_Changes.begin(), end = a_Changes.end(); itr != end; ++itr)
 	{
 		unsigned int Coords = itr->y | (itr->z << 8) | (itr->x << 12);
@@ -228,7 +234,8 @@ void cProtocol172::SendChat(const cCompositeChat & a_Message)
 	
 	// Compose the complete Json string to send:
 	Json::Value msg;
-	msg["text"] = "";  // The client crashes without this
+	cWorld * World = m_Client->GetPlayer()->GetWorld();
+	msg["text"] = cClientHandle::FormatMessageType((World == NULL) ? false : World->ShouldUseChatPrefixes(), a_Message.GetMessageType(), a_Message.GetAdditionalMessageTypeData());  // The client crashes without this field being present
 	const cCompositeChat::cParts & Parts = a_Message.GetParts();
 	for (cCompositeChat::cParts::const_iterator itr = Parts.begin(), end = Parts.end(); itr != end; ++itr)
 	{
@@ -280,6 +287,35 @@ void cProtocol172::SendChat(const cCompositeChat & a_Message)
 				Cmd["action"] = (p.m_PartType == cCompositeChat::ptRunCommand) ? "run_command" : "suggest_command";
 				Cmd["value"] = p.m_Command;
 				Part["clickEvent"] = Cmd;
+				AddChatPartStyle(Part, p.m_Style);
+				break;
+			}
+
+			case cCompositeChat::ptShowAchievement:
+			{
+				const cCompositeChat::cShowAchievementPart & p = (const cCompositeChat::cShowAchievementPart &)**itr;
+				Part["translate"] = "chat.type.achievement";
+
+				Json::Value Ach;
+				Ach["action"] = "show_achievement";
+				Ach["value"] = p.m_Text;
+				
+				Json::Value AchColourAndName;
+				AchColourAndName["color"] = "green";
+				AchColourAndName["translate"] = p.m_Text;
+				AchColourAndName["hoverEvent"] = Ach;
+
+				Json::Value Extra;
+				Extra.append(AchColourAndName);
+
+				Json::Value Name;
+				Name["text"] = p.m_PlayerName;
+
+				Json::Value With;
+				With.append(Name);
+				With.append(Extra);
+
+				Part["with"] = With;
 				AddChatPartStyle(Part, p.m_Style);
 				break;
 			}
@@ -532,7 +568,7 @@ void cProtocol172::SendExplosion(double a_BlockX, double a_BlockY, double a_Bloc
 	Pkt.WriteFloat((float)a_BlockY);
 	Pkt.WriteFloat((float)a_BlockZ);
 	Pkt.WriteFloat((float)a_Radius);
-	Pkt.WriteInt(a_BlocksAffected.size());
+	Pkt.WriteInt((int)a_BlocksAffected.size());
 	for (cVector3iArray::const_iterator itr = a_BlocksAffected.begin(), end = a_BlocksAffected.end(); itr != end; ++itr)
 	{
 		Pkt.WriteChar((char)itr->x);
@@ -698,7 +734,7 @@ void cProtocol172::SendMapDecorators(int a_ID, const cMapDecoratorList & a_Decor
 	
 	cPacketizer Pkt(*this, 0x34);
 	Pkt.WriteVarInt(a_ID);
-	Pkt.WriteShort (1 + (3 * a_Decorators.size()));
+	Pkt.WriteShort ((short)(1 + (3 * a_Decorators.size())));
 
 	Pkt.WriteByte(1);
 	
@@ -1169,12 +1205,34 @@ void cProtocol172::SendSpawnVehicle(const cEntity & a_Vehicle, char a_VehicleTyp
 
 
 
+void cProtocol172::SendStatistics(const cStatManager & a_Manager)
+{
+	ASSERT(m_State == 3);  // In game mode?
+	
+	cPacketizer Pkt(*this, 0x37);
+	Pkt.WriteVarInt(statCount); // TODO 2014-05-11 xdot: Optimization: Send "dirty" statistics only
+
+	for (unsigned int i = 0; i < (unsigned int)statCount; ++i)
+	{
+		StatValue Value = a_Manager.GetValue((eStatistic) i);
+
+		const AString & StatName = cStatInfo::GetName((eStatistic) i);
+
+		Pkt.WriteString(StatName);
+		Pkt.WriteVarInt(Value);
+	}
+}
+
+
+
+
+
 void cProtocol172::SendTabCompletionResults(const AStringVector & a_Results)
 {
 	ASSERT(m_State == 3);  // In game mode?
 	
 	cPacketizer Pkt(*this, 0x3a);  // Tab-Complete packet
-	Pkt.WriteVarInt(a_Results.size());
+	Pkt.WriteVarInt((int)a_Results.size());
 
 	for (AStringVector::const_iterator itr = a_Results.begin(), end = a_Results.end(); itr != end; ++itr)
 	{
@@ -1743,7 +1801,7 @@ void cProtocol172::HandlePacketLoginStart(cByteBuffer & a_ByteBuffer)
 		cPacketizer Pkt(*this, 0x01);
 		Pkt.WriteString(Server->GetServerID());
 		const AString & PubKeyDer = Server->GetPublicKeyDER();
-		Pkt.WriteShort(PubKeyDer.size());
+		Pkt.WriteShort((short)PubKeyDer.size());
 		Pkt.WriteBuf(PubKeyDer.data(), PubKeyDer.size());
 		Pkt.WriteShort(4);
 		Pkt.WriteInt((int)(intptr_t)this);  // Using 'this' as the cryptographic nonce, so that we don't have to generate one each time :)
@@ -1843,13 +1901,15 @@ void cProtocol172::HandlePacketClientStatus(cByteBuffer & a_ByteBuffer)
 		case 1:
 		{
 			// Request stats
-			// TODO
+			const cStatManager & Manager = m_Client->GetPlayer()->GetStatManager();
+			SendStatistics(Manager);
+
 			break;
 		}
 		case 2:
 		{
 			// Open Inventory achievement
-			// TODO
+			m_Client->GetPlayer()->AwardAchievement(achOpenInv);
 			break;
 		}
 	}
@@ -2138,7 +2198,7 @@ void cProtocol172::WritePacket(cByteBuffer & a_Packet)
 	cCSLock Lock(m_CSPacket);
 	AString Pkt;
 	a_Packet.ReadAll(Pkt);
-	WriteVarInt(Pkt.size());
+	WriteVarInt((UInt32)Pkt.size());
 	SendData(Pkt.data(), Pkt.size());
 	Flush();
 }
@@ -2278,6 +2338,13 @@ void cProtocol172::ParseItemMetadata(cItem & a_Item, const AString & a_Metadata)
 				}
 				break;
 			}
+			case TAG_Int:
+			{
+				if (TagName == "RepairCost")
+				{
+					a_Item.m_RepairCost = NBT.GetInt(tag);
+				}
+			}
 			default: LOGD("Unimplemented NBT data when parsing!"); break;
 		}
 	}
@@ -2396,7 +2463,7 @@ cProtocol172::cPacketizer::~cPacketizer()
 	AString DataToSend;
 
 	// Send the packet length
-	UInt32 PacketLen = m_Out.GetUsedSpace();
+	UInt32 PacketLen = (UInt32)m_Out.GetUsedSpace();
 	m_Protocol.m_OutPacketLenBuffer.WriteVarInt(PacketLen);
 	m_Protocol.m_OutPacketLenBuffer.ReadAll(DataToSend);
 	m_Protocol.SendData(DataToSend.data(), DataToSend.size());
@@ -2451,6 +2518,10 @@ void cProtocol172::cPacketizer::WriteItem(const cItem & a_Item)
 
 	// Send the enchantments and custom names:
 	cFastNBTWriter Writer;
+	if (a_Item.m_RepairCost != 0)
+	{
+		Writer.AddInt("RepairCost", a_Item.m_RepairCost);
+	}
 	if (!a_Item.m_Enchantments.IsEmpty())
 	{
 		const char * TagName = (a_Item.m_ItemType == E_ITEM_BOOK) ? "StoredEnchantments" : "ench";
@@ -2489,7 +2560,7 @@ void cProtocol172::cPacketizer::WriteItem(const cItem & a_Item)
 	Writer.Finish();
 	AString Compressed;
 	CompressStringGZIP(Writer.GetResult().data(), Writer.GetResult().size(), Compressed);
-	WriteShort(Compressed.size());
+	WriteShort((short)Compressed.size());
 	WriteBuf(Compressed.data(), Compressed.size());
 }
 
@@ -2559,7 +2630,7 @@ void cProtocol172::cPacketizer::WriteBlockEntity(const cBlockEntity & a_BlockEnt
 
 	AString Compressed;
 	CompressStringGZIP(Writer.GetResult().data(), Writer.GetResult().size(), Compressed);
-	WriteShort(Compressed.size());
+	WriteShort((short)Compressed.size());
 	WriteBuf(Compressed.data(), Compressed.size());
 }
 

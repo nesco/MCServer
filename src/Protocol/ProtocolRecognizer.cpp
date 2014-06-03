@@ -675,6 +675,16 @@ void cProtocolRecognizer::SendSpawnVehicle(const cEntity & a_Vehicle, char a_Veh
 
 
 
+void cProtocolRecognizer::SendStatistics(const cStatManager & a_Manager)
+{
+	ASSERT(m_Protocol != NULL);
+	m_Protocol->SendStatistics(a_Manager);
+}
+
+
+
+
+
 void cProtocolRecognizer::SendTabCompletionResults(const AStringVector & a_Results)
 {
 	ASSERT(m_Protocol != NULL);
@@ -871,7 +881,7 @@ bool cProtocolRecognizer::TryRecognizeProtocol(void)
 		// Not enough bytes for the packet length, keep waiting
 		return false;
 	}
-	ReadSoFar -= m_Buffer.GetReadableSpace();
+	ReadSoFar -= (UInt32)m_Buffer.GetReadableSpace();
 	if (!m_Buffer.CanReadBytes(PacketLen))
 	{
 		// Not enough bytes for the packet, keep waiting
@@ -961,7 +971,7 @@ bool cProtocolRecognizer::TryRecognizeLengthedProtocol(UInt32 a_PacketLengthRema
 	{
 		return false;
 	}
-	NumBytesRead -= m_Buffer.GetReadableSpace();
+	NumBytesRead -= (UInt32)m_Buffer.GetReadableSpace();
 	switch (ProtocolVersion)
 	{
 		case PROTO_VERSION_1_7_2:

@@ -243,6 +243,16 @@ void cInventory::SetHotbarSlot(int a_HotBarSlotNum, const cItem & a_Item)
 
 
 
+void cInventory::SendEquippedSlot()
+{
+	int EquippedSlotNum = cInventory::invArmorCount + cInventory::invInventoryCount + GetEquippedSlotNum();
+	SendSlot(EquippedSlotNum);
+}
+
+
+
+
+
 const cItem & cInventory::GetSlot(int a_SlotNum) const
 {
 	if ((a_SlotNum < 0) || (a_SlotNum >= invNumSlots))
@@ -376,6 +386,7 @@ bool cInventory::DamageItem(int a_SlotNum, short a_Amount)
 	if (!Grid->DamageItem(GridSlotNum, a_Amount))
 	{
 		// The item has been damaged, but did not break yet
+		SendSlot(a_SlotNum);
 		return false;
 	}
 	
