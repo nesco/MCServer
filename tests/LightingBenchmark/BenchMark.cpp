@@ -40,16 +40,23 @@ void LOGERROR(const char* a_Format, ...)
 #include "BenchBlockInfo.h"
 #include "LightingThreadOld.h"
 #include "LightingThreadHeightMap.h"
+#include "../../src/Noise.h"
 
 int main(int argc, char** argv)
 {
 	std::cout << "preping for tests" << std::endl;
 	cWorld * world = new cWorld();
-	unsigned char BlockTypes[16 * 16 * 256];
-	memset(BlockTypes, 1, 32768);
-	memset(BlockTypes + 32768, 0, 32768);
+	cPerlinNoise Noise(293848);
+	Noise.AddOctave(32,200);
 	for (int i = 0; i < 3 * 3; i++)
 	{
+		float NoiseArray[16 * 16 * 256 ];
+		Noise.Generate3D(NoiseArray, 16, 16, 256, i % 3, i % 3 + 1, i / 3, i / 3 + 1, 0, 1);
+		unsigned char BlockTypes[16 * 16 * 256];
+		for (size_t j = 0; j < sizeof(BlockTypes); j++)
+		{
+			BlockTypes[j] = (NoiseArray[j] + j / 256) > 127 ? 0 : 1;
+		}
 		world->m_BlockTypes[i].SetBlockTypes(BlockTypes);
 		memset(world->m_HeightMap[i], 127, 256);
 	}

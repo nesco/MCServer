@@ -11,6 +11,6 @@ enable_profile()
 set_exe_flags()
 
 include_directories(../../lib)
-#include_directories(../../src)
+include_directories(../../src)
 
-add_executable(LightingBenchmark BenchMark LightingThreadOld.cpp LightingThreadHeightMap.cpp BlockInfo.cpp ../../src/ChunkData.cpp)
+add_executable(LightingBenchmark BenchMark LightingThreadOld.cpp LightingThreadHeightMap.cpp BlockInfo.cpp ../../src/ChunkData.cpp ../../src/Noise.cpp ../../src/StringUtils.cpp ../../src/OSSupport/File.cpp)
