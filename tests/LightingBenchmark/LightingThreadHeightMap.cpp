@@ -25,14 +25,7 @@ typedef unsigned long long UInt64;
 typedef unsigned int       UInt32;
 typedef unsigned short     UInt16;
 
-void inline LOGERROR(const char* a_Format, ...) FORMATSTRING(1,2);
-void inline LOGERROR(const char* a_Format, ...)
-{
-	va_list argList;
-	va_start(argList, a_Format);
-	vprintf(a_Format, argList);
-	va_end(argList);
-}
+void LOGERROR(const char* a_Format, ...) FORMATSTRING(1,2);
 
 #include "../../src/ChunkDef.h"
 #include "BenchBlockInfo.h"
