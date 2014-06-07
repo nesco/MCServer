@@ -6,6 +6,8 @@
 //Globals.h
 
 #include <string>
+#include <cstdarg>
+#include <cstdio>
 
 typedef std::string AString;
 #define TOLUA_TEMPLATE_BIND(x)
