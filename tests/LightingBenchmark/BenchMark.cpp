@@ -6,6 +6,7 @@
 
 #include <string>
 #include <cstdarg>
+#include <cstdio>
 
 typedef std::string AString;
 #define TOLUA_TEMPLATE_BIND(x)
@@ -17,6 +18,7 @@ typedef std::string AString;
 #define ASSERT(x)
 #define UNUSED(x)
 #define abstract
+#define override
 typedef long long Int64;
 typedef int       Int32;
 typedef short     Int16;
