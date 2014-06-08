@@ -3,6 +3,8 @@
 //Globals.h
 
 #include <string>
+#include <cstdarg>
+#include <cstdio>
 
 typedef std::string AString;
 #define TOLUA_TEMPLATE_BIND(x)
@@ -13,6 +15,9 @@ typedef std::string AString;
 #endif
 #define ASSERT(x)
 #define UNUSED(x)
+#define override
+#define abstract
+
 typedef long long Int64;
 typedef int       Int32;
 typedef short     Int16;
@@ -21,14 +26,8 @@ typedef unsigned long long UInt64;
 typedef unsigned int       UInt32;
 typedef unsigned short     UInt16;
 
-void inline LOGERROR(const char* a_Format, ...) FORMATSTRING(1,2);
-void inline LOGERROR(const char* a_Format, ...)
-{
-	va_list argList;
-	va_start(argList, a_Format);
-	vprintf(a_Format, argList);
-	va_end(argList);
-}
+void LOGERROR(const char* a_Format, ...) FORMATSTRING(1,2);
+
 
 #include "../../src/ChunkDef.h"
 #include "BenchBlockInfo.h"
