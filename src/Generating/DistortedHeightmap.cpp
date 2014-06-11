@@ -267,7 +267,7 @@ const cDistortedHeightmap::sGenParam cDistortedHeightmap::m_GenParam[256] =
 	/* biExtremeHillsPlusM    */ {32.0f, 32.0f},  // 162
 	/* biSavannaM             */ { 2.0f,  2.0f},  // 163
 	/* biSavannaPlateauM      */ { 3.0f,  3.0f},  // 164
-	/* biMesaBryce            */ { 0.5f,  0.5f},  // 165
+	/* biMesaBryce            */ { 0.2f,  0.2f},  // 165
 	/* biMesaPlateauFM        */ { 2.0f,  2.0f},  // 166
 	/* biMesaPlateauM         */ { 2.0f,  2.0f},  // 167
 } ;
@@ -443,6 +443,11 @@ void cDistortedHeightmap::GenerateHeightArray(void)
 
 	// The distorted heightmap, before linear upscaling
 	NOISE_DATATYPE DistHei[DIM_X * DIM_Y * DIM_Z];
+	
+	NOISE_DATATYPE SmallNoise[DIM_X * DIM_Z];
+	cPerlinNoise SmPerlin(0);
+	SmPerlin.AddOctave(0.2f, 1);
+	SmPerlin.Generate2D(SmallNoise, DIM_X, DIM_Z, StartX, EndX, StartZ, EndZ, Workspace);
 
 	// Distort the heightmap using the distortion:
 	for (int z = 0; z < DIM_Z; z++)
@@ -458,7 +463,7 @@ void cDistortedHeightmap::GenerateHeightArray(void)
 				DistX += (NOISE_DATATYPE)(m_CurChunkX * cChunkDef::Width + x * INTERPOL_X);
 				DistZ += (NOISE_DATATYPE)(m_CurChunkZ * cChunkDef::Width + z * INTERPOL_Z);
 				// Adding 0.5 helps alleviate the interpolation artifacts
-				DistHei[NoiseArrayIdx + x] = (NOISE_DATATYPE)GetHeightmapAt(DistX, DistZ) + (NOISE_DATATYPE)0.5;
+				DistHei[NoiseArrayIdx + x] = (NOISE_DATATYPE)GetHeightmapAt(DistX, DistZ) + SmallNoise[x + DIM_X * z];
 			}
 		}
 	}
@@ -794,7 +799,7 @@ void cDistortedHeightmap::FillColumnPattern(cChunkDesc & a_ChunkDesc, int a_RelX
 	int PatternIdx = 0;
 	for (int y = a_ChunkDesc.GetHeight(a_RelX, a_RelZ); y > 0; y--)
 	{
-		int HeightMapHeight = (int)m_DistortedHeightmap[NoiseArrayIdx + 17 * y];
+		int HeightMapHeight = (int)floor(m_DistortedHeightmap[NoiseArrayIdx + 17 * y]);
 
 		if (y < HeightMapHeight)
 		{
@@ -876,7 +881,7 @@ void cDistortedHeightmap::FillColumnMesa(cChunkDesc & a_ChunkDesc, int a_RelX, i
 	bool HasHadWater = false;
 	for (int y = Top; y > 0; y--)
 	{
-		int HeightMapHeight = (int)m_DistortedHeightmap[NoiseArrayIdx + 17 * y];
+		int HeightMapHeight = (int)floor(m_DistortedHeightmap[NoiseArrayIdx + 17 * y]);
 		if (y < HeightMapHeight)
 		{
 			// "ground" part, use the pattern:

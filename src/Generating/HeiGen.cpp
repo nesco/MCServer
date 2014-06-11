@@ -407,11 +407,11 @@ void cHeiGenMesaBryce::GenHeightMap(int a_ChunkX, int a_ChunkZ, cChunkDef::Heigh
 			int hei;
 			if (Noise1[idx] > 1.5f)
 			{
-				hei = 83 + (int)floor(Noise3[idx]);
+				hei = 85 + (int)floor(Noise3[idx]);
 			}
 			else
 			{
-				hei = 63 + (int)floor(Noise2[idx]);
+				hei = 65 + (int)floor(Noise2[idx]);
 			}
 			/*
 			NOISE_DATATYPE v1 = sqrt(sqrt(std::max(Noise1[idx], (NOISE_DATATYPE)0))) - 50;
@@ -442,8 +442,8 @@ void cHeiGenMesaBryce::InitializeHeightGen(cIniFile & a_IniFile)
 	m_PerlinHFHA.AddOctave(0.13f, 17800000);
 	m_PerlinHFHA.AddOctave(0.12f, 19000000);
 	*/
-	m_PerlinHFHA.AddOctave(0.13f, 2);
-	m_PerlinHFHA.AddOctave(0.12f, 2);
+	m_PerlinHFHA.AddOctave(0.07f, 2);
+	m_PerlinHFHA.AddOctave(0.06f, 2);
 
 	m_PerlinLFLA.AddOctave(0.04f, 1);
 	m_PerlinLFLA.AddOctave(0.02f, 2);
