@@ -23,38 +23,113 @@ class cHeiGenVarying :
 	public cTerrainHeightGen
 {
 public:
-	cHeiGenVarying(void)
+
+	cHeiGenVarying(int a_Seed) :
+		m_Seed(a_Seed)
 	{
-		// Reset the values to their defaults:
-		for (size_t i = 0; i < ARRAYCOUNT(m_Freq); i++)
-		{
-			m_Freq[i] = 0;
-		}
-		for (size_t i = 0; i < ARRAYCOUNT(m_Freq); i++)
-		{
-			m_AmpFreq[i] = 0;
-		}
-		for (size_t i = 0; i < ARRAYCOUNT(m_Freq); i++)
-		{
-			m_AmpAmp[i] = 0;
-		}
-		m_AmpBase = 1;
 	}
 	
 protected:
 
-	NOISE_DATATYPE m_Freq[3];
-	NOISE_DATATYPE m_AmpFreq[3];
-	NOISE_DATATYPE m_AmpAmp[3];
-	NOISE_DATATYPE m_AmpBase;
+	/** Storage for the parameters of a single octave.
+	FinalOctave = Noise(m_Freq) * m_FreqAmp * (m_AmpBase + Noise(m_AmpFreq) * m_AmpAmp) */
+	struct cOctave
+	{
+		/** Frequency that this octave represents in the final noise */
+		NOISE_DATATYPE m_Freq;
+
+		/** The max amplitude of the frequency in this octave in the final noise, in blocks */
+		NOISE_DATATYPE m_FreqAmp;
+
+		/** Frequency of the noise used to modulate the final noise */
+		NOISE_DATATYPE m_AmpFreq;
+
+		/** Amplitude of the noise used to modulate the final noise */
+		NOISE_DATATYPE m_AmpAmp;
+
+		/** Constant that is added to the noise used to modulate the final noise. */
+		NOISE_DATATYPE m_AmpBase;
+	} ;
+	typedef std::vector<cOctave> cOctaves;
+
+
+	/** The X-size of the calculated array, for which the noise values are calculated. Upscaled into chunk size, must be a divisor of 16, plus one.*/
+	static const size_t SIZE_X = 5;
+
+	/** The Y-size of the calculated array, for which the noise values are calculated. Upscaled into chunk size, must be a divisor of 16, plus one.*/
+	static const size_t SIZE_Y = 5;
+
+
+	/** Seed for the random noise values. */
+	int m_Seed;
+
+	/** Per-octave parameters of the noise */
+	cOctaves m_Octaves;
+
+	/** Constant that is added to the final noise */
+	NOISE_DATATYPE m_Base;
+
 
 	// cTerrainHeightGen overrides:
 	virtual void GenHeightMap(int a_ChunkX, int a_ChunkZ, cChunkDef::HeightMap & a_HeightMap) override
 	{
+		// Calculate the boundaries in the noise-space:
+		NOISE_DATATYPE StartX = (NOISE_DATATYPE)(a_ChunkX * cChunkDef::Width);
+		NOISE_DATATYPE EndX   = (NOISE_DATATYPE)(a_ChunkX * cChunkDef::Width + cChunkDef::Width);
+		NOISE_DATATYPE StartY = (NOISE_DATATYPE)(a_ChunkZ * cChunkDef::Width);
+		NOISE_DATATYPE EndY   = (NOISE_DATATYPE)(a_ChunkZ * cChunkDef::Width + cChunkDef::Width);
+
+		// Create a Total array for the sums of the noise octaves, initialize with the base value:
+		NOISE_DATATYPE Total[SIZE_X * SIZE_Y];
+		for (size_t i = 0; i < ARRAYCOUNT(Total); i++)
+		{
+			Total[i] = m_Base;
+		}
+
+		// Generate each octave and add up to Total:
+		int idx = 0;
+		for (cOctaves::const_iterator itr = m_Octaves.begin(), end = m_Octaves.end(); itr != end; ++itr, idx += 8)
+		{
+			NOISE_DATATYPE Noise[SIZE_X * SIZE_Y];
+			NOISE_DATATYPE AmpNoise1[SIZE_X * SIZE_Y];
+			NOISE_DATATYPE AmpNoise2[SIZE_X * SIZE_Y];
+			NOISE_DATATYPE Workspace[SIZE_X * SIZE_Y];
+			cPerlinNoise pnFinal(m_Seed + idx), pnAmp1(m_Seed + idx + 1), pnAmp2(m_Seed + idx + 2);
+			pnFinal.AddOctave(itr->m_Freq, itr->m_FreqAmp / 2);
+			pnAmp1.AddOctave(itr->m_AmpFreq, itr->m_AmpAmp);
+			pnAmp2.AddOctave(itr->m_AmpFreq, itr->m_AmpAmp);
+			pnAmp1.Generate2D(AmpNoise1, SIZE_X, SIZE_Y, StartX, EndX, StartY, EndY, Workspace);
+			pnAmp2.Generate2D(AmpNoise2, SIZE_X, SIZE_Y, StartX, EndX, StartY, EndY, Workspace);
+			pnFinal.Generate2D(Noise, SIZE_X, SIZE_Y, StartX, EndX, StartY, EndY, Workspace);
+			for (size_t i = 0; i < ARRAYCOUNT(Total); i++)
+			{
+				Total[i] = Total[i] + Noise[i] * (itr->m_AmpBase + AmpNoise1[i]) * (itr->m_AmpBase + AmpNoise2[i]);
+			}  // for i - Noise[] / AmpNoise[] / Total[]
+		}  // for i - octaves
+
+		// Upscale to the entire chunk:
+		NOISE_DATATYPE Chunk[(cChunkDef::Width + 1) * (cChunkDef::Width + 1)];
+		LinearUpscale2DArray(Total, SIZE_X, SIZE_Y, Chunk, cChunkDef::Width / (SIZE_X - 1), cChunkDef::Width / (SIZE_Y - 1));
+
+		// Floor the calculated values into the heightmap:
+		for (int z = 0; z < cChunkDef::Width; z++) for (int x = 0; x < cChunkDef::Width; x++)
+		{
+			unsigned char val = (unsigned char)floor(Chunk[x + z * (cChunkDef::Width + 1)]);
+			cChunkDef::SetHeight(a_HeightMap, x, z, val);
+		}  // for x, for z
 	}
+
 
 	virtual void InitializeHeightGen(cIniFile & a_IniFile) override
 	{
+		// TODO: Read these values from the ini file
+		static const cOctave Octave[] =
+		{
+			// Freq, FreqAmp, AmpFreq, AmpAmp, Base
+			{  0.1f,      16,   0.02f,   0.5f, 0.51f},  // Generates a plains terrain with random hills every now and then, up to 16 blocks high
+		} ;
+		m_Octaves.push_back(Octave[0]);
+		m_Base = 60;
 	}
 } ;
 
@@ -100,6 +175,10 @@ cTerrainHeightGen * cTerrainHeightGen::CreateHeightGen(cIniFile &a_IniFile, cBio
 	else if (NoCaseCompare(HeightGenName, "Noise3D") == 0)
 	{
 		res = new cNoise3DComposable(a_Seed);
+	}
+	else if (NoCaseCompare(HeightGenName, "varying") == 0)
+	{
+		res = new cHeiGenVarying(a_Seed);
 	}
 	else if (NoCaseCompare(HeightGenName, "biomal") == 0)
 	{
