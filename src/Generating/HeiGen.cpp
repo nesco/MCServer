@@ -17,6 +17,52 @@
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// cHeiGenVarying:
+
+class cHeiGenVarying :
+	public cTerrainHeightGen
+{
+public:
+	cHeiGenVarying(void)
+	{
+		// Reset the values to their defaults:
+		for (size_t i = 0; i < ARRAYCOUNT(m_Freq); i++)
+		{
+			m_Freq[i] = 0;
+		}
+		for (size_t i = 0; i < ARRAYCOUNT(m_Freq); i++)
+		{
+			m_AmpFreq[i] = 0;
+		}
+		for (size_t i = 0; i < ARRAYCOUNT(m_Freq); i++)
+		{
+			m_AmpAmp[i] = 0;
+		}
+		m_AmpBase = 1;
+	}
+	
+protected:
+
+	NOISE_DATATYPE m_Freq[3];
+	NOISE_DATATYPE m_AmpFreq[3];
+	NOISE_DATATYPE m_AmpAmp[3];
+	NOISE_DATATYPE m_AmpBase;
+
+	// cTerrainHeightGen overrides:
+	virtual void GenHeightMap(int a_ChunkX, int a_ChunkZ, cChunkDef::HeightMap & a_HeightMap) override
+	{
+	}
+
+	virtual void InitializeHeightGen(cIniFile & a_IniFile) override
+	{
+	}
+} ;
+
+
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // cTerrainHeightGen:
 
 cTerrainHeightGen * cTerrainHeightGen::CreateHeightGen(cIniFile &a_IniFile, cBiomeGen & a_BiomeGen, int a_Seed, bool & a_CacheOffByDefault)
