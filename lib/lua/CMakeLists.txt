@@ -68,3 +68,7 @@ if (UNIX)
 	target_link_libraries(lua m ${DYNAMIC_LOADER})
 endif()
 
+#lua exe for build process
+
+add_executable(lua-exe src/lua.c src/print.c)
+target_link_libraries(lua-exe lua)
