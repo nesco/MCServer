@@ -374,7 +374,7 @@ AString cWebAdmin::GetDefaultPage(void)
 {
 	AString Content;
 	Content += "<h4>Server Name:</h4>";
-	Content += "<p>" + AString( cRoot::Get()->GetServer()->GetServerID() ) + "</p>";
+	Content += "<p>" + AString( cRoot::Get()->GetServer()->GetServerID()) + "</p>";
 
 	Content += "<h4>Plugins:</h4><ul>";
 	cPluginManager * PM = cPluginManager::Get();
@@ -391,8 +391,8 @@ AString cWebAdmin::GetDefaultPage(void)
 	Content += "<h4>Players:</h4><ul>";
 
 	cPlayerAccum PlayerAccum;
-	cWorld * World = cRoot::Get()->GetDefaultWorld(); // TODO - Create a list of worlds and players
-	if( World != NULL )
+	cWorld * World = cRoot::Get()->GetDefaultWorld();  // TODO - Create a list of worlds and players
+	if (World != NULL)
 	{
 		World->ForEachPlayer(PlayerAccum);
 		Content.append(PlayerAccum.m_Contents);
@@ -404,7 +404,7 @@ AString cWebAdmin::GetDefaultPage(void)
 
 
 
-AString cWebAdmin::GetBaseURL( const AString& a_URL )
+AString cWebAdmin::GetBaseURL( const AString& a_URL)
 {
 	return GetBaseURL(StringSplit(a_URL, "/"));
 }
@@ -531,7 +531,7 @@ void cWebAdmin::OnRequestFinished(cHTTPConnection & a_Connection, cHTTPRequest &
 
 
 
-///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
 // cWebAdmin::cWebadminRequestData
 
 void cWebAdmin::cWebadminRequestData::OnBody(const char * a_Data, size_t a_Size)
