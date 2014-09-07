@@ -377,7 +377,7 @@ typename std::enable_if<std::is_arithmetic<T>::value, C>::type FloorC(T a_Value)
 	return static_cast<C>(std::floor(a_Value));
 }
 
-/** Ciels a value, then casts it to C (an int by default) */
+/** Ceils a value, then casts it to C (an int by default) */
 template <typename C = int, typename T>
 typename std::enable_if<std::is_arithmetic<T>::value, C>::type CeilC(T a_Value)
 {
