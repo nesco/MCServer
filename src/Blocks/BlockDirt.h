@@ -81,18 +81,12 @@ public:
 			Chunk->GetBlockTypeMeta(BlockX, BlockY + 1, BlockZ, AboveDest, AboveMeta);
 			if (cBlockInfo::GetHandler(AboveDest)->CanDirtGrowGrass(AboveMeta))
 			{
-				if (!cRoot::Get()->GetPluginManager()->CallHookBlockSpread((cWorld*) &a_WorldInterface, BlockX * cChunkDef::Width, BlockY, BlockZ * cChunkDef::Width, ssGrassSpread))
+				if (!cRoot::Get()->GetPluginManager()->CallHookBlockSpread(Chunk->GetWorld(), Chunk->GetPosX() * cChunkDef::Width + BlockX, BlockY, Chunk->GetPosZ() * cChunkDef::Width + BlockZ, ssGrassSpread))
 				{
 					Chunk->FastSetBlock(BlockX, BlockY, BlockZ, E_BLOCK_GRASS, 0);
 				}
 			}
 		}  // for i - repeat twice
-	}
-
-
-	virtual const char * GetStepSound(void) override
-	{
-		return "step.gravel";
 	}
 } ;
 

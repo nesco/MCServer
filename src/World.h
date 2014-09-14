@@ -157,14 +157,14 @@ public:
 	}
 
 	virtual Int64 GetWorldAge (void) const override { return m_WorldAge; }
-	virtual Int64 GetTimeOfDay(void) const override { return m_TimeOfDay; }
+	virtual int GetTimeOfDay(void) const override { return m_TimeOfDay; }
 	
 	void SetTicksUntilWeatherChange(int a_WeatherInterval)
 	{
 		m_WeatherInterval = a_WeatherInterval;
 	}
 
-	virtual void SetTimeOfDay(Int64 a_TimeOfDay) override
+	virtual void SetTimeOfDay(int a_TimeOfDay) override
 	{
 		m_TimeOfDay = a_TimeOfDay;
 		m_TimeOfDaySecs = (double)a_TimeOfDay / 20.0;
@@ -235,7 +235,7 @@ public:
 	void BroadcastEntityRelMoveLook      (const cEntity & a_Entity, char a_RelX, char a_RelY, char a_RelZ, const cClientHandle * a_Exclude = NULL);
 	void BroadcastEntityStatus           (const cEntity & a_Entity, char a_Status, const cClientHandle * a_Exclude = NULL);
 	void BroadcastEntityVelocity         (const cEntity & a_Entity, const cClientHandle * a_Exclude = NULL);
-	virtual void BroadcastEntityAnimation(const cEntity & a_Entity, char a_Animation, const cClientHandle * a_Exclude = NULL) override; // tolua_export
+	virtual void BroadcastEntityAnimation(const cEntity & a_Entity, char a_Animation, const cClientHandle * a_Exclude = NULL) override;  // tolua_export
 	void BroadcastParticleEffect         (const AString & a_ParticleName, float a_SrcX, float a_SrcY, float a_SrcZ, float a_OffsetX, float a_OffsetY, float a_OffsetZ, float a_ParticleData, int a_ParticleAmmount, cClientHandle * a_Exclude = NULL);  // tolua_export
 	void BroadcastPlayerListItem         (const cPlayer & a_Player, bool a_IsOnline, const cClientHandle * a_Exclude = NULL);
 	void BroadcastRemoveEntityEffect     (const cEntity & a_Entity, int a_EffectID, const cClientHandle * a_Exclude = NULL);
@@ -279,7 +279,12 @@ public:
 	/** Gets the chunk's blocks, only the block types */
 	bool GetChunkBlockTypes(int a_ChunkX, int a_ChunkZ, BLOCKTYPE * a_BlockTypes);
 	
-	bool IsChunkValid      (int a_ChunkX, int a_ChunkZ) const;
+	/** Returns true iff the chunk is in the loader / generator queue. */
+	bool IsChunkQueued(int a_ChunkX, int a_ChunkZ) const;
+
+	/** Returns true iff the chunk is present and valid. */
+	bool IsChunkValid(int a_ChunkX, int a_ChunkZ) const;
+
 	bool HasChunkAnyClients(int a_ChunkX, int a_ChunkZ) const;
 	
 	/** Queues a task to unload unused chunks onto the tick thread. The prefferred way of unloading*/
@@ -324,6 +329,11 @@ public:
 	/** Calls the callback for each entity in the specified chunk; returns true if all entities processed, false if the callback aborted by returning true */
 	bool ForEachEntityInChunk(int a_ChunkX, int a_ChunkZ, cEntityCallback & a_Callback);  // Exported in ManualBindings.cpp
 
+	/** Calls the callback for each entity that has a nonempty intersection with the specified boundingbox.
+	Returns true if all entities processed, false if the callback aborted by returning true.
+	If any chunk in the box is missing, ignores the entities in that chunk silently. */
+	bool ForEachEntityInBox(const cBoundingBox & a_Box, cEntityCallback & a_Callback);  // Exported in ManualBindings.cpp
+
 	/** Calls the callback if the entity with the specified ID is found, with the entity object as the callback param. Returns true if entity found and callback returned false. */
 	bool DoWithEntityByID(int a_UniqueID, cEntityCallback & a_Callback);  // Exported in ManualBindings.cpp
 
@@ -351,16 +361,10 @@ public:
 	void RemoveClientFromChunkSender(cClientHandle * a_Client);
 	
 	/** Touches the chunk, causing it to be loaded or generated */
-	void TouchChunk(int a_ChunkX, int a_ChunkY, int a_ChunkZ);
-	
-	/** Loads the chunk, if not already loaded. Doesn't generate. Returns true if chunk valid (even if already loaded before) */
-	bool LoadChunk(int a_ChunkX, int a_ChunkY, int a_ChunkZ);
-	
-	/** Loads the chunks specified. Doesn't report failure, other than chunks being !IsValid() */
-	void LoadChunks(const cChunkCoordsList & a_Chunks);
+	void TouchChunk(int a_ChunkX, int a_ChunkZ);
 	
 	/** Marks the chunk as failed-to-load: */
-	void ChunkLoadFailed(int a_ChunkX, int a_ChunkY, int a_ChunkZ);
+	void ChunkLoadFailed(int a_ChunkX, int a_ChunkZ);
 	
 	/** Sets the sign text, asking plugins for permission first. a_Player is the player who this change belongs to, may be NULL. Returns true if sign text changed. Same as UpdateSign() */
 	bool SetSignLines(int a_BlockX, int a_BlockY, int a_BlockZ, const AString & a_Line1, const AString & a_Line2, const AString & a_Line3, const AString & a_Line4, cPlayer * a_Player = NULL);  // Exported in ManualBindings.cpp
@@ -380,7 +384,7 @@ public:
 	/** Regenerate the given chunk: */
 	void RegenerateChunk(int a_ChunkX, int a_ChunkZ);  // tolua_export
 	
-	/** Generates the given chunk, if not already generated */
+	/** Generates the given chunk */
 	void GenerateChunk(int a_ChunkX, int a_ChunkZ);  // tolua_export
 	
 	/** Queues a chunk for lighting; a_Callback is called after the chunk is lighted */
@@ -465,7 +469,7 @@ public:
 	int SpawnMinecart(double a_X, double a_Y, double a_Z, int a_MinecartType, const cItem & a_Content = cItem(), int a_BlockHeight = 1);
 
 	/** Spawns an experience orb at the given location with the given reward. It returns the UniqueID of the spawned experience orb. */
-	int SpawnExperienceOrb(double a_X, double a_Y, double a_Z, int a_Reward);
+	virtual int SpawnExperienceOrb(double a_X, double a_Y, double a_Z, int a_Reward) override;
 
 	/** Spawns a new primed TNT entity at the specified block coords and specified fuse duration. Initial velocity is given based on the relative coefficient provided */
 	void SpawnPrimedTNT(double a_X, double a_Y, double a_Z, int a_FuseTimeInSec = 80, double a_InitialVelocityCoeff = 1);
@@ -817,6 +821,7 @@ private:
 		virtual void OnChunkGenerated  (cChunkDesc & a_ChunkDesc) override;
 		virtual bool IsChunkValid      (int a_ChunkX, int a_ChunkZ) override;
 		virtual bool HasChunkAnyClients(int a_ChunkX, int a_ChunkZ) override;
+		virtual bool IsChunkQueued     (int a_ChunkX, int a_ChunkZ) override;
 		
 		// cPluginInterface overrides:
 		virtual void CallHookChunkGenerating(cChunkDesc & a_ChunkDesc) override;
@@ -883,7 +888,7 @@ private:
 	double m_WorldAgeSecs;      // World age, in seconds. Is only incremented, cannot be set by plugins.
 	double m_TimeOfDaySecs;     // Time of day in seconds. Can be adjusted. Is wrapped to zero each day.
 	Int64  m_WorldAge;          // World age in ticks, calculated off of m_WorldAgeSecs
-	Int64  m_TimeOfDay;         // Time in ticks, calculated off of m_TimeOfDaySecs
+	int    m_TimeOfDay;         // Time in ticks, calculated off of m_TimeOfDaySecs
 	Int64  m_LastTimeUpdate;    // The tick in which the last time update has been sent.
 	Int64  m_LastUnload;        // The last WorldAge (in ticks) in which unloading was triggerred
 	Int64  m_LastSave;          // The last WorldAge (in ticks) in which save-all was triggerred

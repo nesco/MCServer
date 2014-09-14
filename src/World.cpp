@@ -1,3 +1,4 @@
+
 #include "Globals.h"  // NOTE: MSVC stupidness requires this to be the same across all modules
 
 #include "BlockID.h"
@@ -250,8 +251,38 @@ cWorld::cWorld(const AString & a_WorldName, eDimension a_Dimension, const AStrin
 	m_TimeOfDay(0),
 	m_LastTimeUpdate(0),
 	m_SkyDarkness(0),
+	m_GameMode(gmNotSet),
+	m_bEnabledPVP(false),
+	m_IsDeepSnowEnabled(false),
+	m_ShouldLavaSpawnFire(true),
+	m_VillagersShouldHarvestCrops(true),
+	m_SimulatorManager(NULL),
+	m_SandSimulator(NULL),
+	m_WaterSimulator(NULL),
+	m_LavaSimulator(NULL),
+	m_FireSimulator(NULL),
+	m_RedstoneSimulator(NULL),
+	m_MaxPlayers(10),
+	m_ChunkMap(NULL),
+	m_bAnimals(true),
 	m_Weather(eWeather_Sunny),
 	m_WeatherInterval(24000),  // Guaranteed 1 day of sunshine at server start :)
+	m_MaxCactusHeight(3),
+	m_MaxSugarcaneHeight(4),
+	m_IsCactusBonemealable(false),
+	m_IsCarrotsBonemealable(true),
+	m_IsCropsBonemealable(true),
+	m_IsGrassBonemealable(true),
+	m_IsMelonStemBonemealable(true),
+	m_IsMelonBonemealable(true),
+	m_IsPotatoesBonemealable(true),
+	m_IsPumpkinStemBonemealable(true),
+	m_IsPumpkinBonemealable(true),
+	m_IsSaplingBonemealable(true),
+	m_IsSugarcaneBonemealable(false),
+	m_bCommandBlocksEnabled(true),
+	m_bUseChatPrefixes(false),
+	m_TNTShrapnelLevel(slNone),
 	m_Scoreboard(this),
 	m_MapManager(this),
 	m_GeneratorCallbacks(*this),
@@ -406,12 +437,12 @@ void cWorld::InitializeSpawn(void)
 	int ViewDist = IniFile.GetValueSetI("SpawnPosition", "PregenerateDistance", DefaultViewDist);
 	IniFile.WriteFile(m_IniFileName);
 	
-	LOG("Preparing spawn area in world \"%s\"...", m_WorldName.c_str());
+	LOG("Preparing spawn area in world \"%s\", %d x %d chunks, total %d chunks...", m_WorldName.c_str(), ViewDist, ViewDist, ViewDist * ViewDist);
 	for (int x = 0; x < ViewDist; x++)
 	{
 		for (int z = 0; z < ViewDist; z++)
 		{
-			m_ChunkMap->TouchChunk(x + ChunkX-(ViewDist - 1) / 2, ZERO_CHUNK_Y, z + ChunkZ-(ViewDist - 1) / 2);  // Queue the chunk in the generator / loader
+			m_ChunkMap->TouchChunk(x + ChunkX-(ViewDist - 1) / 2, z + ChunkZ-(ViewDist - 1) / 2);  // Queue the chunk in the generator / loader
 		}
 	}
 	
@@ -726,6 +757,11 @@ void cWorld::InitialiseGeneratorDefaults(cIniFile & a_IniFile)
 			a_IniFile.GetValueSet("Generator", "BottomLavaHeight", "30");
 			break;
 		}
+		case dimNotSet:
+		{
+			ASSERT(!"Dimension not set");
+			break;
+		}
 	}
 }
 
@@ -741,6 +777,7 @@ void cWorld::InitialiseAndLoadMobSpawningValues(cIniFile & a_IniFile)
 		case dimOverworld: DefaultMonsters = "bat, cavespider, chicken, cow, creeper, enderman, horse, mooshroom, ocelot, pig, sheep, silverfish, skeleton, slime, spider, squid, wolf, zombie"; break;
 		case dimNether:    DefaultMonsters = "blaze, ghast, magmacube, skeleton, zombie, zombiepigman"; break;
 		case dimEnd:       DefaultMonsters = "enderman"; break;
+		case dimNotSet:    ASSERT(!"Dimension not set"); break;
 	}
 	
 	m_bAnimals = a_IniFile.GetValueSetB("Monsters", "AnimalsOn", true);
@@ -845,7 +882,7 @@ void cWorld::Tick(float a_Dt, int a_LastTickDurationMSec)
 			m_TimeOfDaySecs -= 1200.0;
 		}
 
-		m_TimeOfDay = (Int64)(m_TimeOfDaySecs * 20.0);
+		m_TimeOfDay = static_cast<int>(m_TimeOfDaySecs * 20.0);
 
 		// Updates the sky darkness based on current time of day
 		UpdateSkyDarkness();
@@ -1099,7 +1136,7 @@ void cWorld::UpdateSkyDarkness(void)
 	}
 	else if (TempTime <= TIME_NIGHT_START)
 	{
-		m_SkyDarkness = (TIME_NIGHT_START - TempTime) / TIME_SPAWN_DIVISOR;
+		m_SkyDarkness = static_cast<NIBBLETYPE>((TIME_NIGHT_START - TempTime) / TIME_SPAWN_DIVISOR);
 	}
 	else if (TempTime <= TIME_NIGHT_END)
 	{
@@ -1107,7 +1144,7 @@ void cWorld::UpdateSkyDarkness(void)
 	}
 	else
 	{
-		m_SkyDarkness = (TIME_SUNRISE - TempTime) / TIME_SPAWN_DIVISOR;
+		m_SkyDarkness = static_cast<NIBBLETYPE>((TIME_SUNRISE - TempTime) / TIME_SPAWN_DIVISOR);
 	}
 }
 
@@ -1195,24 +1232,26 @@ void cWorld::DoExplosionAt(double a_ExplosionSize, double a_BlockX, double a_Blo
 		return;
 	}
 	
-	// TODO: Add damage to entities and implement block hardiness
+	// TODO: Implement block hardiness
 	Vector3d explosion_pos = Vector3d(a_BlockX, a_BlockY, a_BlockZ);
 	cVector3iArray BlocksAffected;
 	m_ChunkMap->DoExplosionAt(a_ExplosionSize, a_BlockX, a_BlockY, a_BlockZ, BlocksAffected);
 	BroadcastSoundEffect("random.explode", (double)a_BlockX, (double)a_BlockY, (double)a_BlockZ, 1.0f, 0.6f);
+
 	{
 		cCSLock Lock(m_CSPlayers);
 		for (cPlayerList::iterator itr = m_Players.begin(); itr != m_Players.end(); ++itr)
 		{
 			cClientHandle * ch = (*itr)->GetClientHandle();
-			if ((ch == NULL) || !ch->IsLoggedIn() || ch->IsDestroyed())
+			if (ch == NULL)
 			{
 				continue;
 			}
+
 			Vector3d distance_explosion = (*itr)->GetPosition() - explosion_pos;
 			if (distance_explosion.SqrLength() < 4096.0)
 			{
-				double real_distance = std::max(0.004, sqrt(distance_explosion.SqrLength()));
+				double real_distance = std::max(0.004, distance_explosion.Length());
 				double power = a_ExplosionSize / real_distance;
 				if (power <= 1)
 				{
@@ -1224,6 +1263,7 @@ void cWorld::DoExplosionAt(double a_ExplosionSize, double a_BlockX, double a_Blo
 			}
 		}
 	}
+
 	cPluginManager::Get()->CallHookExploded(*this, a_ExplosionSize, a_CanCauseFire, a_BlockX, a_BlockY, a_BlockZ, a_Source, a_SourceData);
 }
 
@@ -1558,9 +1598,9 @@ bool cWorld::GrowRipePlant(int a_BlockX, int a_BlockY, int a_BlockZ, bool a_IsBy
 			MTRand r1;
 			for (int i = 0; i < 60; i++)
 			{
-				int OfsX = (r1.randInt(3) + r1.randInt(3) + r1.randInt(3) + r1.randInt(3)) / 2 - 3;
-				int OfsY = r1.randInt(3) + r1.randInt(3) - 3;
-				int OfsZ = (r1.randInt(3) + r1.randInt(3) + r1.randInt(3) + r1.randInt(3)) / 2 - 3;
+				int OfsX = static_cast<int>(r1.randInt(3) + r1.randInt(3) + r1.randInt(3) + r1.randInt(3)) / 2 - 3;
+				int OfsY = static_cast<int>(r1.randInt(3) + r1.randInt(3)) - 3;
+				int OfsZ = static_cast<int>(r1.randInt(3) + r1.randInt(3) + r1.randInt(3) + r1.randInt(3)) / 2 - 3;
 				BLOCKTYPE Ground = GetBlock(a_BlockX + OfsX, a_BlockY + OfsY, a_BlockZ + OfsZ);
 				if (Ground != E_BLOCK_GRASS)
 				{
@@ -1687,7 +1727,7 @@ bool cWorld::SetAreaBiome(const cCuboid & a_Area, EMCSBiome a_Biome)
 
 void cWorld::SetBlock(int a_BlockX, int a_BlockY, int a_BlockZ, BLOCKTYPE a_BlockType, NIBBLETYPE a_BlockMeta, bool a_SendToClients)
 {
-	m_ChunkMap->SetBlock(*this, a_BlockX, a_BlockY, a_BlockZ, a_BlockType, a_BlockMeta, a_SendToClients);
+	m_ChunkMap->SetBlock(a_BlockX, a_BlockY, a_BlockZ, a_BlockType, a_BlockMeta, a_SendToClients);
 }
 
 
@@ -2340,6 +2380,8 @@ void cWorld::MarkChunkSaved (int a_ChunkX, int a_ChunkZ)
 
 void cWorld::QueueSetChunkData(const cSetChunkDataPtr & a_SetChunkData)
 {
+	ASSERT(IsChunkQueued(a_SetChunkData->GetChunkX(), a_SetChunkData->GetChunkZ()));
+
 	// Validate biomes, if needed:
 	if (!a_SetChunkData->AreBiomesValid())
 	{
@@ -2390,7 +2432,7 @@ void cWorld::SetChunkData(cSetChunkData & a_SetChunkData)
 	// Save the chunk right after generating, so that we don't have to generate it again on next run
 	if (a_SetChunkData.ShouldMarkDirty())
 	{
-		m_Storage.QueueSaveChunk(ChunkX, 0, ChunkZ);
+		m_Storage.QueueSaveChunk(ChunkX, ChunkZ);
 	}
 }
 
@@ -2423,6 +2465,15 @@ bool cWorld::GetChunkData(int a_ChunkX, int a_ChunkZ, cChunkDataCallback & a_Cal
 bool cWorld::GetChunkBlockTypes(int a_ChunkX, int a_ChunkZ, BLOCKTYPE * a_BlockTypes)
 {
 	return m_ChunkMap->GetChunkBlockTypes(a_ChunkX, a_ChunkZ, a_BlockTypes);
+}
+
+
+
+
+
+bool cWorld::IsChunkQueued(int a_ChunkX, int a_ChunkZ) const
+{
+	return m_ChunkMap->IsChunkQueued(a_ChunkX, a_ChunkZ);
 }
 
 
@@ -2662,6 +2713,15 @@ bool cWorld::ForEachEntityInChunk(int a_ChunkX, int a_ChunkZ, cEntityCallback & 
 
 
 
+bool cWorld::ForEachEntityInBox(const cBoundingBox & a_Box, cEntityCallback & a_Callback)
+{
+	return m_ChunkMap->ForEachEntityInBox(a_Box, a_Callback);
+}
+
+
+
+
+
 bool cWorld::DoWithEntityByID(int a_UniqueID, cEntityCallback & a_Callback)
 {
 	return m_ChunkMap->DoWithEntityByID(a_UniqueID, a_Callback);
@@ -2735,36 +2795,18 @@ void cWorld::RemoveClientFromChunkSender(cClientHandle * a_Client)
 
 
 
-void cWorld::TouchChunk(int a_ChunkX, int a_ChunkY, int a_ChunkZ)
+void cWorld::TouchChunk(int a_ChunkX, int a_ChunkZ)
 {
-	m_ChunkMap->TouchChunk(a_ChunkX, a_ChunkY, a_ChunkZ);
+	m_ChunkMap->TouchChunk(a_ChunkX, a_ChunkZ);
 }
 
 
 
 
 
-bool cWorld::LoadChunk(int a_ChunkX, int a_ChunkY, int a_ChunkZ)
+void cWorld::ChunkLoadFailed(int a_ChunkX, int a_ChunkZ)
 {
-	return m_ChunkMap->LoadChunk(a_ChunkX, a_ChunkY, a_ChunkZ);
-}
-
-
-
-	
-
-void cWorld::LoadChunks(const cChunkCoordsList & a_Chunks)
-{
-	m_ChunkMap->LoadChunks(a_Chunks);
-}
-
-
-
-
-
-void cWorld::ChunkLoadFailed(int a_ChunkX, int a_ChunkY, int a_ChunkZ)
-{
-	m_ChunkMap->ChunkLoadFailed(a_ChunkX, a_ChunkY, a_ChunkZ);
+	m_ChunkMap->ChunkLoadFailed(a_ChunkX, a_ChunkZ);
 }
 
 
@@ -2808,7 +2850,7 @@ bool cWorld::SetCommandBlockCommand(int a_BlockX, int a_BlockY, int a_BlockZ, co
 	{
 		AString m_Command;
 	public:
-		cUpdateCommandBlock(const AString & a_Command) : m_Command(a_Command) {}
+		cUpdateCommandBlock(const AString & a_CallbackCommand) : m_Command(a_CallbackCommand) {}
 			
 		virtual bool Item(cCommandBlockEntity * a_CommandBlock) override
 		{
@@ -2869,8 +2911,7 @@ void cWorld::RegenerateChunk(int a_ChunkX, int a_ChunkZ)
 {
 	m_ChunkMap->MarkChunkRegenerating(a_ChunkX, a_ChunkZ);
 	
-	// Trick: use Y=1 to force the chunk generation even though the chunk data is already present
-	m_Generator.QueueGenerateChunk(a_ChunkX, 1, a_ChunkZ);
+	m_Generator.QueueGenerateChunk(a_ChunkX, a_ChunkZ, true);
 }
 
 
@@ -2879,7 +2920,7 @@ void cWorld::RegenerateChunk(int a_ChunkX, int a_ChunkZ)
 
 void cWorld::GenerateChunk(int a_ChunkX, int a_ChunkZ)
 {
-	m_Generator.QueueGenerateChunk(a_ChunkX, ZERO_CHUNK_Y, a_ChunkZ);
+	m_Generator.QueueGenerateChunk(a_ChunkX, a_ChunkZ, false);
 }
 
 
@@ -3284,20 +3325,26 @@ cFluidSimulator * cWorld::InitializeFluidSimulator(cIniFile & a_IniFile, const c
 		int Falloff               = a_IniFile.GetValueSetI(SimulatorSectionName, "Falloff",               IsWater ? 1 : 2);
 		int TickDelay             = a_IniFile.GetValueSetI(SimulatorSectionName, "TickDelay",             IsWater ? 5 : 30);
 		int NumNeighborsForSource = a_IniFile.GetValueSetI(SimulatorSectionName, "NumNeighborsForSource", IsWater ? 2 : -1);
+		
+		if ((Falloff > 15) || (Falloff < 0))
+		{
+			LOGWARNING("Falloff for %s simulator is out of range, assuming default of %d", a_FluidName, IsWater ? 1 : 2);
+			Falloff = IsWater ? 1 : 2;
+		}
 
 		if (NoCaseCompare(SimulatorName, "floody") == 0)
 		{
-			res = new cFloodyFluidSimulator(*this, a_SimulateBlock, a_StationaryBlock, Falloff, TickDelay, NumNeighborsForSource);
+			res = new cFloodyFluidSimulator(*this, a_SimulateBlock, a_StationaryBlock, static_cast<NIBBLETYPE>(Falloff), TickDelay, NumNeighborsForSource);
 		}
 		else if (NoCaseCompare(SimulatorName, "vanilla") == 0)
 		{
-			res = new cVanillaFluidSimulator(*this, a_SimulateBlock, a_StationaryBlock, Falloff, TickDelay, NumNeighborsForSource);
+			res = new cVanillaFluidSimulator(*this, a_SimulateBlock, a_StationaryBlock, static_cast<NIBBLETYPE>(Falloff), TickDelay, NumNeighborsForSource);
 		}
 		else
 		{
 			// The simulator name doesn't match anything we have, issue a warning:
 			LOGWARNING("%s [Physics]:%s specifies an unknown simulator, using the default \"Vanilla\".", GetIniFileName().c_str(), SimulatorNameKey.c_str());
-			res = new cVanillaFluidSimulator(*this, a_SimulateBlock, a_StationaryBlock, Falloff, TickDelay, NumNeighborsForSource);
+			res = new cVanillaFluidSimulator(*this, a_SimulateBlock, a_StationaryBlock, static_cast<NIBBLETYPE>(Falloff), TickDelay, NumNeighborsForSource);
 		}
 	}
 	
@@ -3327,7 +3374,7 @@ void cWorld::AddQueuedPlayers(void)
 		cCSLock Lock(m_CSPlayers);
 		for (cPlayerList::iterator itr = PlayersToAdd.begin(), end = PlayersToAdd.end(); itr != end; ++itr)
 		{
-			ASSERT(std::find(m_Players.begin(), m_Players.end(), *itr) == m_Players.end());  // Is it already in the list? HOW?			
+			ASSERT(std::find(m_Players.begin(), m_Players.end(), *itr) == m_Players.end());  // Is it already in the list? HOW?
 			LOGD("Adding player %s to world \"%s\".", (*itr)->GetName().c_str(), m_WorldName.c_str());
 
 			m_Players.push_back(*itr);
@@ -3407,9 +3454,9 @@ void cWorld::cTaskSendBlockToAllPlayers::Run(cWorld & a_World)
 		public cPlayerListCallback
 	{
 	public:
-		cPlayerCallback(std::vector<Vector3i> & a_SendQueue, cWorld & a_World) :
+		cPlayerCallback(std::vector<Vector3i> & a_SendQueue, cWorld & a_CallbackWorld) :
 			m_SendQueue(a_SendQueue),
-			m_World(a_World)
+			m_World(a_CallbackWorld)
 		{
 		}
 
@@ -3453,14 +3500,16 @@ void cWorld::cChunkGeneratorCallbacks::OnChunkGenerated(cChunkDesc & a_ChunkDesc
 	cChunkDef::BlockNibbles BlockMetas;
 	a_ChunkDesc.CompressBlockMetas(BlockMetas);
 
-	m_World->QueueSetChunkData(cSetChunkDataPtr(new cSetChunkData(
+	cSetChunkDataPtr SetChunkData(new cSetChunkData(
 		a_ChunkDesc.GetChunkX(), a_ChunkDesc.GetChunkZ(),
 		a_ChunkDesc.GetBlockTypes(), BlockMetas,
 		NULL, NULL,  // We don't have lighting, chunk will be lighted when needed
 		&a_ChunkDesc.GetHeightMap(), &a_ChunkDesc.GetBiomeMap(),
 		a_ChunkDesc.GetEntities(), a_ChunkDesc.GetBlockEntities(),
 		true
-	)));
+	));
+	SetChunkData->RemoveInvalidBlockEntities();
+	m_World->QueueSetChunkData(SetChunkData);
 }
 
 
@@ -3470,6 +3519,15 @@ void cWorld::cChunkGeneratorCallbacks::OnChunkGenerated(cChunkDesc & a_ChunkDesc
 bool cWorld::cChunkGeneratorCallbacks::IsChunkValid(int a_ChunkX, int a_ChunkZ)
 {
 	return m_World->IsChunkValid(a_ChunkX, a_ChunkZ);
+}
+
+
+
+
+
+bool cWorld::cChunkGeneratorCallbacks::IsChunkQueued(int a_ChunkX, int a_ChunkZ)
+{
+	return m_World->IsChunkQueued(a_ChunkX, a_ChunkZ);
 }
 
 

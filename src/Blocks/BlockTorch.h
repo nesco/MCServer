@@ -126,7 +126,7 @@ public:
 				(BlockInQuestion == E_BLOCK_NETHER_BRICK_FENCE) ||
 				(BlockInQuestion == E_BLOCK_COBBLESTONE_WALL)) &&
 				(Face == BLOCK_FACE_TOP)
-				)
+			)
 			{
 				return Face;
 			}
@@ -162,7 +162,7 @@ public:
 			(BlockInQuestion == E_BLOCK_END_PORTAL_FRAME) ||  // Actual vanilla behaviour
 			(BlockInQuestion == E_BLOCK_NETHER_BRICK_FENCE) ||
 			(BlockInQuestion == E_BLOCK_COBBLESTONE_WALL)
-			)
+		)
 		{
 			// Torches can be placed on tops of glass and fences, despite them being 'untorcheable'
 			// No need to check for upright orientation, it was done when the torch was placed
@@ -183,12 +183,6 @@ public:
 	{
 		// Always drop meta = 0
 		a_Pickups.push_back(cItem(m_BlockType, 1, 0));
-	}
-
-
-	virtual const char * GetStepSound(void) override
-	{
-		return "step.wood";
 	}
 } ;
 
